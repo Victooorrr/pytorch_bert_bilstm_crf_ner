@@ -4,7 +4,11 @@ import logging
 from transformers import BertTokenizer
 from utils import cutSentences, commonUtils
 import config
+import sys
 
+from utils.utils import build_iterator
+
+os.chdir(sys.path[0])
 logger = logging.getLogger(__name__)
 
 
@@ -65,7 +69,7 @@ class NerProcessor:
             else:
                 labels = item['labels']
                 if len(labels) != 0:
-                    labels = [(label[1],label[4],label[2]) for label in labels]
+                    labels = [(label[1], label[4], label[2]) for label in labels]
                 examples.append(InputExample(set_type=set_type,
                                              text=text,
                                              labels=labels))
@@ -100,25 +104,29 @@ def convert_bert_example(ex_idx, example: InputExample, tokenizer: BertTokenizer
     label_ids = [0] * len(tokens)
 
     # tag labels  ent ex. (T1, DRUG_DOSAGE, 447, 450, 小蜜丸)
+    # 实体标签转化为序列标注任务的标签
     for ent in entities:
         # ent: ('PER', '陈元', 0)
-        ent_type = ent[0] # 类别
+        ent_type = ent[0]  # 类别
 
-        ent_start = ent[-1] # 起始位置
+        ent_start = ent[-1]  # 起始位置
         ent_end = ent_start + len(ent[1]) - 1
 
         if ent_start == ent_end:
+            # 单字
             label_ids[ent_start] = ent2id['S-' + ent_type]
         else:
+            # 起始
             label_ids[ent_start] = ent2id['B-' + ent_type]
+            # 结束
             label_ids[ent_end] = ent2id['E-' + ent_type]
+            # 中间
             for i in range(ent_start + 1, ent_end):
                 label_ids[i] = ent2id['I-' + ent_type]
 
-
     if len(label_ids) > max_seq_len - 2:
         label_ids = label_ids[:max_seq_len - 2]
-
+    # label_ids的首尾各添加一个标记，用于标记序列的开始和结束
     label_ids = [0] + label_ids + [0]
 
     # pad
@@ -129,6 +137,10 @@ def convert_bert_example(ex_idx, example: InputExample, tokenizer: BertTokenizer
     assert len(label_ids) == max_seq_len, f'{len(label_ids)}'
 
     # ========================
+    # 将tokens序列转化为包含input_ids、attention_masks、token_type_ids的字典encode_dict
+    # input_ids是tokens序列在词表中对应的token ID序列，用于模型的输入。
+    # attention_masks是一个序列，表示哪些元素是padding值，哪些是实际的tokens，用于在模型中标记需要进行注意力计算的元素。
+    # token_type_ids用于区分文本中的不同部分，比如句子1和句子2，在单个句子分类任务中，这个值都为0。
     encode_dict = tokenizer.encode_plus(text=tokens,
                                         max_length=max_seq_len,
                                         padding="max_length",
@@ -142,7 +154,7 @@ def convert_bert_example(ex_idx, example: InputExample, tokenizer: BertTokenizer
 
     if ex_idx < 3:
         logger.info(f"*** {set_type}_example-{ex_idx} ***")
-        print(tokenizer.decode(token_ids[:len(raw_text)+2]))
+        print(tokenizer.decode(token_ids[:len(raw_text) + 2]))
         logger.info(f'text: {str(" ".join(tokens))}')
         logger.info(f"token_ids: {token_ids}")
         logger.info(f"attention_masks: {attention_masks}")
@@ -162,8 +174,10 @@ def convert_bert_example(ex_idx, example: InputExample, tokenizer: BertTokenizer
     return feature, callback_info
 
 
+# 预训练模型
 def convert_examples_to_features(examples, max_seq_len, bert_dir, ent2id, labels):
-    tokenizer = BertTokenizer(os.path.join(bert_dir, 'vocab.txt'))
+    # tokenizer = BertTokenizer(os.path.join(bert_dir, 'vocab.txt'))
+    tokenizer = BertTokenizer.from_pretrained('../model_hub/chinese-bert-wwm-ext')
     features = []
     callback_info = []
 
@@ -172,18 +186,20 @@ def convert_examples_to_features(examples, max_seq_len, bert_dir, ent2id, labels
     for i, example in enumerate(examples):
         # 有可能text为空，过滤掉
         if not example.text:
-          continue
+            continue
+        # token_ids、attention_masks 和 token_type_ids
         feature, tmp_callback = convert_bert_example(
             ex_idx=i,
             example=example,
             max_seq_len=max_seq_len,
             ent2id=ent2id,
             tokenizer=tokenizer,
-            labels = labels,
+            labels=labels,
         )
         if feature is None:
             continue
         features.append(feature)
+        # 对象与原始文本和真实实体位置信息保存
         callback_info.append(tmp_callback)
     logger.info(f'Build {len(features)} features')
 
@@ -195,6 +211,7 @@ def convert_examples_to_features(examples, max_seq_len, bert_dir, ent2id, labels
     out += (callback_info,)
     return out
 
+
 def get_data(processor, raw_data_path, json_file, mode, ent2id, labels, args):
     raw_examples = processor.read_json(os.path.join(raw_data_path, json_file))
     examples = processor.get_examples(raw_examples, mode)
@@ -205,12 +222,14 @@ def get_data(processor, raw_data_path, json_file, mode, ent2id, labels, args):
     commonUtils.save_pkl(save_path, data, mode)
     return data
 
-def save_file(filename, data ,id2ent):
+
+def save_file(filename, data, id2ent):
     features, callback_info = data
-    file = open(filename,'w',encoding='utf-8')
-    for feature,tmp_callback in zip(features, callback_info):
+    print("features:{}\ncallback_info:{}", features,callback_info)
+    file = open(filename, 'w', encoding='utf-8')
+    for feature, tmp_callback in zip(features, callback_info):
         text, gt_entities = tmp_callback
-        for word, label in zip(text, feature.labels[1:len(text)+1]):
+        for word, label in zip(text, feature.labels[1:len(text) + 1]):
             file.write(word + ' ' + id2ent[label] + '\n')
         file.write('\n')
     file.close()
@@ -218,9 +237,10 @@ def save_file(filename, data ,id2ent):
 
 if __name__ == '__main__':
 
-    dataset = "cner"
+    dataset = "aid"
     args = config.Args().get_parser()
     args.bert_dir = '../model_hub/chinese-bert-wwm-ext/'
+
     commonUtils.set_logger(os.path.join(args.log_dir, 'preprocess.log'))
 
     use_aug = False
@@ -245,7 +265,7 @@ if __name__ == '__main__':
             train_data = get_data(processor, mid_data_path, "train_aug.json", "train", ent2id, labels, args)
         else:
             train_data = get_data(processor, mid_data_path, "train.json", "train", ent2id, labels, args)
-        save_file(os.path.join(mid_data_path,"cner_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
+        save_file(os.path.join(mid_data_path, "cner_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
         dev_data = get_data(processor, mid_data_path, "dev.json", "dev", ent2id, labels, args)
         test_data = get_data(processor, mid_data_path, "test.json", "test", ent2id, labels, args)
 
@@ -269,7 +289,7 @@ if __name__ == '__main__':
             train_data = get_data(processor, mid_data_path, "train_aug.json", "train", ent2id, labels, args)
         else:
             train_data = get_data(processor, mid_data_path, "train.json", "train", ent2id, labels, args)
-        save_file(os.path.join(mid_data_path,"chip_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
+        save_file(os.path.join(mid_data_path, "chip_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
         dev_data = get_data(processor, mid_data_path, "dev.json", "dev", ent2id, labels, args)
         # test_data = get_data(processor, mid_data_path, "test.json", "test", ent2id, labels, args)
 
@@ -293,9 +313,10 @@ if __name__ == '__main__':
             train_data = get_data(processor, mid_data_path, "train_aug.json", "train", ent2id, labels, args)
         else:
             train_data = get_data(processor, mid_data_path, "train.json", "train", ent2id, labels, args)
-        save_file(os.path.join(mid_data_path,"clue_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
+        save_file(os.path.join(mid_data_path, "clue_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
         dev_data = get_data(processor, mid_data_path, "dev.json", "dev", ent2id, labels, args)
         # test_data = get_data(processor, mid_data_path, "test.json", "test", ent2id, labels, args)
+
     elif dataset == "addr":
         args.data_dir = './data/addr'
         args.max_seq_len = 64
@@ -316,9 +337,10 @@ if __name__ == '__main__':
             train_data = get_data(processor, mid_data_path, "train_aug.json", "train", ent2id, labels, args)
         else:
             train_data = get_data(processor, mid_data_path, "train.json", "train", ent2id, labels, args)
-        save_file(os.path.join(mid_data_path,"clue_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
+        save_file(os.path.join(mid_data_path, "clue_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
         dev_data = get_data(processor, mid_data_path, "dev.json", "dev", ent2id, labels, args)
         # test_data = get_data(processor, mid_data_path, "test.json", "test", ent2id, labels, args)
+
     elif dataset == "attr":
         args.data_dir = './data/attr'
         args.max_seq_len = 128
@@ -339,7 +361,7 @@ if __name__ == '__main__':
             train_data = get_data(processor, mid_data_path, "train_aug.json", "train", ent2id, labels, args)
         else:
             train_data = get_data(processor, mid_data_path, "train.json", "train", ent2id, labels, args)
-        save_file(os.path.join(mid_data_path,"clue_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
+        save_file(os.path.join(mid_data_path, "clue_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
         dev_data = get_data(processor, mid_data_path, "dev.json", "dev", ent2id, labels, args)
         # test_data = get_data(processor, mid_data_path, "test.json", "test", ent2id, labels, args)
 
@@ -369,12 +391,14 @@ if __name__ == '__main__':
         args.max_seq_len = 70
 
         labels_path = os.path.join(args.data_dir, 'mid_data', 'labels.json')
-        with open(labels_path, 'r') as fp:
+        with open(labels_path, 'r', encoding='utf-8') as fp:
             labels = json.load(fp)
+            # print("labels:{}",labels)
 
         ent2id_path = os.path.join(args.data_dir, 'mid_data')
         with open(os.path.join(ent2id_path, 'nor_ent2id.json'), encoding='utf-8') as f:
             ent2id = json.load(f)
+            # print("ent2id:{}",ent2id)
         id2ent = {v: k for k, v in ent2id.items()}
 
         mid_data_path = os.path.join(args.data_dir, 'mid_data')
@@ -384,3 +408,25 @@ if __name__ == '__main__':
         save_file(os.path.join(mid_data_path, "clue_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
         dev_data = get_data(processor, mid_data_path, "dev.json", "dev", ent2id, labels, args)
         # test_data = get_data(processor, mid_data_path, "test.json", "test", ent2id, labels, args)
+
+    elif dataset == "aid":
+        args.data_dir = './data/aid'
+        args.max_seq_len = 70
+
+        labels_path = os.path.join(args.data_dir, 'mid_data', 'labels.json')
+
+        with open(labels_path, 'r', encoding='utf-8') as fp:
+            labels = json.load(fp)
+            # print("labels:{}",labels)
+
+        ent2id_path = os.path.join(args.data_dir, 'mid_data')
+        with open(os.path.join(ent2id_path, 'nor_ent2id.json'), encoding='utf-8') as f:
+            ent2id = json.load(f)
+            # print("ent2id:{}",ent2id)
+        id2ent = {v: k for k, v in ent2id.items()}
+
+        mid_data_path = os.path.join(args.data_dir, 'mid_data')
+        processor = NerProcessor(cut_sent=True, cut_sent_len=args.max_seq_len)
+        train_data = get_data(processor, mid_data_path, "train.json", "train", ent2id, labels, args)
+        save_file(os.path.join(mid_data_path, "clue_{}_cut.txt".format(args.max_seq_len)), train_data, id2ent)
+        dev_data = get_data(processor, mid_data_path, "dev.json", "dev", ent2id, labels, args)

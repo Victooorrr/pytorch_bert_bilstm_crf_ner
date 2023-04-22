@@ -18,12 +18,7 @@ class NerDataset(Dataset):
         return self.nums
 
     def __getitem__(self, index):
-        data = {
-            'token_ids': self.token_ids[index],
-            'attention_masks': self.attention_masks[index],
-            'token_type_ids': self.token_type_ids[index]
-        }
-
-        data['labels'] = self.labels[index]
+        data = {'token_ids': self.token_ids[index], 'attention_masks': self.attention_masks[index],
+                'token_type_ids': self.token_type_ids[index], 'labels': self.labels[index]}
 
         return data

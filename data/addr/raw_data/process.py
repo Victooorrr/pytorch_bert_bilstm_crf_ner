@@ -2,6 +2,7 @@ import os
 import re
 import json
 
+
 def preprocess(input_path, save_path, mode):
     if not os.path.exists(save_path):
         os.makedirs(save_path)
@@ -13,7 +14,7 @@ def preprocess(input_path, save_path, mode):
     tmp['text'] = ''
     tmp['labels'] = []
     # =======先找出句子和句子中的所有实体和类型=======
-    with open(input_path,'r',encoding='utf-8') as fp:
+    with open(input_path, 'r', encoding='utf-8') as fp:
         lines = fp.readlines()
         texts = []
         entities = []
@@ -50,17 +51,17 @@ def preprocess(input_path, save_path, mode):
     # ==========================================
     # =======找出句子中实体的位置=======
     i = 0
-    for text,entity in zip(texts, entities):
+    for text, entity in zip(texts, entities):
 
         if entity:
             ltmp = []
-            for ent,type in entity:
+            for ent, type in entity:
                 for span in re.finditer(ent, text):
                     start = span.start()
                     end = span.end()
                     ltmp.append((type, start, end, ent))
                     # print(ltmp)
-            ltmp = sorted(ltmp, key=lambda x:(x[1],x[2]))
+            ltmp = sorted(ltmp, key=lambda x: (x[1], x[2]))
             tmp['id'] = i
             tmp['text'] = text
             for j in range(len(ltmp)):
@@ -77,13 +78,14 @@ def preprocess(input_path, save_path, mode):
         tmp['labels'] = []
         i += 1
 
-    with open(data_path,'w', encoding='utf-8') as fp:
+    with open(data_path, 'w', encoding='utf-8') as fp:
         fp.write(json.dumps(result, ensure_ascii=False))
 
     if mode == "train":
         label_path = os.path.join(save_path, "labels.json")
         with open(label_path, 'w', encoding='utf-8') as fp:
             fp.write(json.dumps(list(labels), ensure_ascii=False))
+
 
 preprocess("train.conll", '../mid_data', "train")
 preprocess("dev.conll", '../mid_data', "dev")
@@ -101,10 +103,10 @@ for label in labels:
     tmp_labels.append('S-' + label)
 
 label2id = {}
-for k,v in enumerate(tmp_labels):
+for k, v in enumerate(tmp_labels):
     label2id[v] = k
-path  = '../mid_data/'
+path = '../mid_data/'
 if not os.path.exists(path):
     os.makedirs(path)
-with open(os.path.join(path, "nor_ent2id.json"),'w') as fp:
+with open(os.path.join(path, "nor_ent2id.json"), 'w') as fp:
     fp.write(json.dumps(label2id, ensure_ascii=False))

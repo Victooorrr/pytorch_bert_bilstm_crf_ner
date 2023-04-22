@@ -9,7 +9,6 @@ from torchcrf import CRF
 import config
 
 
-
 class LayerNorm(nn.Module):
     def __init__(self, filters, elementwise_affine=False):
         super(LayerNorm, self).__init__()
@@ -19,7 +18,6 @@ class LayerNorm(nn.Module):
         x = x.permute(0, 2, 1)
         out = self.LN(x)
         return out.permute(0, 2, 1)
-
 
 
 class IDCNN(nn.Module):
@@ -92,6 +90,7 @@ class NormalNerModel(nn.Module):
         config = AutoConfig.from_pretrained(args.bert_dir)
         vocab_size = config.vocab_size
         out_dims = config.hidden_size
+        # 将输入序列中的每个单词转换为长度为out_dims的密集向量表示
         self.embedding = nn.Embedding(vocab_size, out_dims)
 
         self.args = args
@@ -304,6 +303,7 @@ class BertNerModel(BaseModel):
                 return outputs
             outputs = (loss,) + (logits,)
             return outputs
+
 
 if __name__ == '__main__':
     args = config.Args().get_parser()

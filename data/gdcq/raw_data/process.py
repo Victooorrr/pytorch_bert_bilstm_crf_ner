@@ -80,9 +80,10 @@ for d in data.iterrows():
     text = d[10]
     # print(did, aspect, a_start, a_end, opinion, o_start, o_end,
     #       category, polary, text)
+    # 添加主体
     if did not in id_set:
         if tmp:
-            print(tmp)
+            # print(tmp)
             res.append(tmp)
         id_set.add(did)
         tmp = {}

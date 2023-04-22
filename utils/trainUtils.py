@@ -57,6 +57,7 @@ def build_optimizer_and_scheduler(args, model, t_total):
 
     return optimizer, scheduler
 
+
 def save_model(args, model, model_name, global_step):
     """保存最好的验证集效果最好那个模型"""
     output_dir = os.path.join(args.output_dir, '{}'.format(model_name, global_step))
@@ -68,7 +69,9 @@ def save_model(args, model, model_name, global_step):
         model.module if hasattr(model, "module") else model
     )
     logger.info('Saving model checkpoint to {}'.format(output_dir))
+    # 保存整体模型
     torch.save(model_to_save.state_dict(), os.path.join(output_dir, 'model.pt'))
+
 
 def save_model_step(args, model, global_step):
     """根据global_step来保存模型"""
@@ -82,6 +85,7 @@ def save_model_step(args, model, global_step):
     )
     logger.info('Saving model & optimizer & scheduler checkpoint to {}.format(output_dir)')
     torch.save(model_to_save.state_dict(), os.path.join(output_dir, 'model.pt'))
+
 
 def load_model_and_parallel(model, gpu_ids, ckpt_path=None, strict=True):
     """
